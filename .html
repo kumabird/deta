@@ -1,0 +1,24 @@
+<input id="url" placeholder="https://example.com">
+<button onclick="fetchCode()">取得</button>
+
+<pre id="html"></pre>
+<pre id="css"></pre>
+<pre id="js"></pre>
+
+<script>
+async function fetchCode() {
+  const url = document.getElementById("url").value;
+
+  const res = await fetch("/fetch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
+
+  const data = await res.json();
+
+  document.getElementById("html").textContent = data.html;
+  document.getElementById("css").textContent = data.css;
+  document.getElementById("js").textContent = data.js;
+}
+</script>
