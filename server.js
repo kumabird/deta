@@ -9,88 +9,92 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
 
-// public フォルダを公開
-app.use(express.static("public"));
+// プロキシ（SPA の API / 画像 / CSS / JS すべて対応）
+app.get("/proxy", async (req, res) => {
+  const target = req.query.url;
+  if (!target) return res.status(400).send("no url");
 
-// トップページ
+  try {
+    const r = await fetch(target, {
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+
+    const buffer = await r.arrayBuffer();
+    const contentType = r.headers.get("content-type") || "application/octet-stream";
+
+    res.setHeader("Content-Type", contentType);
+    res.send(Buffer.from(buffer));
+  } catch (e) {
+    res.status(500).send("proxy error");
+  }
+});
+
+// URL 書き換え（HTML 内の src/href を全部 proxy 化）
+function rewriteUrls(html, baseUrl) {
+  return html.replace(/(src|href)=["']([^"']+)["']/g, (match, attr, url) => {
+    if (url.startsWith("http")) {
+      return `${attr}="/proxy?url=${url}"`;
+    }
+    const absolute = new URL(url, baseUrl).href;
+    return `${attr}="/proxy?url=${absolute}"`;
+  });
+}
+
+// フレーム再帰取得
+async function fetchFrame(url) {
+  const res = await fetch(url);
+  const html = await res.text();
+  const $ = cheerio.load(html);
+
+  // frameset がある場合
+  const frames = $("frame");
+  if (frames.length > 0) {
+    const frameData = [];
+
+    for (const el of frames.toArray()) {
+      const src = $(el).attr("src");
+      const frameUrl = new URL(src, url).href;
+
+      const content = await fetchFrame(frameUrl);
+
+      frameData.push({
+        src: frameUrl,
+        content
+      });
+    }
+
+    return {
+      type: "frameset",
+      frames: frameData
+    };
+  }
+
+  // 通常の HTML
+  return {
+    type: "html",
+    html: rewriteUrls(html, url)
+  };
+}
+
+// /fetch API（フレーム再帰＋SPA対応）
+app.post("/fetch", async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ error: "URL required" });
+
+  try {
+    const result = await fetchFrame(url);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: "fetch error" });
+  }
+});
+
+// index.html を返す
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// HTML / CSS / JS / フレームを取得する API
-app.post("/fetch", async (req, res) => {
-  const { url } = req.body;
-  if (!url) return res.status(400).json({ error: "URL を指定してください" });
-
-  try {
-    const response = await fetch(url);
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    // HTML
-    const htmlCode = html;
-
-    // CSS
-    const cssList = [];
-    $("style").each((_, el) => cssList.push($(el).html()));
-
-    const cssExternal = await Promise.all(
-      $("link[rel='stylesheet']")
-        .map((_, el) => {
-          const href = $(el).attr("href");
-          if (!href) return "";
-          const cssUrl = new URL(href, url).href;
-          return fetch(cssUrl).then(r => r.text());
-        })
-        .get()
-    );
-
-    const cssCode = [...cssList, ...cssExternal].join("\n\n");
-
-    // JS
-    const jsList = await Promise.all(
-      $("script")
-        .map((_, el) => {
-          const src = $(el).attr("src");
-          if (src) {
-            const jsUrl = new URL(src, url).href;
-            return fetch(jsUrl).then(r => r.text());
-          } else {
-            return Promise.resolve($(el).html());
-          }
-        })
-        .get()
-    );
-
-    const jsCode = jsList.join("\n\n");
-
-    // 🔥 フレーム対応（menu.htm / top.htm など）
-    const frames = $("frame").map((_, el) => $(el).attr("src")).get();
-    const frameContents = {};
-
-    for (const f of frames) {
-      const frameUrl = new URL(f, url).href;
-      try {
-        const frameRes = await fetch(frameUrl);
-        frameContents[f] = await frameRes.text();
-      } catch {
-        frameContents[f] = "取得失敗";
-      }
-    }
-
-    res.json({
-      html: htmlCode,
-      css: cssCode,
-      js: jsCode,
-      frames: frameContents
-    });
-
-  } catch (e) {
-    res.status(500).json({ error: "取得に失敗しました" });
-  }
-});
-
-// Render / Railway 用ポート設定
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Server running on port ${port}`));
+app.listen(port, () => console.log("running", port));
