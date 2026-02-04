@@ -1,0 +1,16 @@
+{
+  "name": "html-fetcher",
+  "version": "1.0.0",
+  "description": "Fetch HTML, CSS, JS from a given URL",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js",
+    "build": "echo no build step"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2"
+  }
+}
