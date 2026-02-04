@@ -27,6 +27,11 @@ app.get("/proxy", async (req, res) => {
     const contentType = r.headers.get("content-type") || "application/octet-stream";
 
     res.setHeader("Content-Type", contentType);
+
+    // ★ ここが最重要 ★
+    res.removeHeader("X-Frame-Options");
+    res.removeHeader("Content-Security-Policy");
+
     res.send(Buffer.from(buffer));
   } catch (e) {
     res.status(500).send("proxy error");
