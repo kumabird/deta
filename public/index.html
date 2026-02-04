@@ -21,7 +21,6 @@
   <input id="url" placeholder="https://example.com" style="width:80%">
   <button onclick="fetchCode()">取得</button>
 
-  <!-- タブ -->
   <div class="tabs">
     <div class="tab active" data-target="html">HTML</div>
     <div class="tab" data-target="css">CSS</div>
@@ -29,7 +28,6 @@
     <div class="tab" data-target="preview">プレビュー</div>
   </div>
 
-  <!-- パネル -->
   <div id="html" class="panel active">
     <textarea id="htmlText"></textarea>
   </div>
@@ -47,7 +45,6 @@
   </div>
 
   <script>
-    // タブ切り替え
     document.querySelectorAll(".tab").forEach(tab => {
       tab.addEventListener("click", () => {
         document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -62,7 +59,6 @@
       });
     });
 
-    // プレビュー更新
     function updatePreview() {
       const html = document.getElementById("htmlText").value;
       const css = document.getElementById("cssText").value;
@@ -75,6 +71,17 @@
         </head>
         <body>
           ${html}
+
+          <script>
+            document.addEventListener("click", function(e) {
+              const a = e.target.closest("a");
+              if (!a) return;
+              e.preventDefault();
+              const url = a.href;
+              window.parent.postMessage({ type: "navigate", url }, "*");
+            });
+          <\/script>
+
           <script>${js}<\/script>
         </body>
         </html>
@@ -83,7 +90,26 @@
       document.getElementById("previewFrame").srcdoc = full;
     }
 
-    // API からコード取得
+    window.addEventListener("message", async (e) => {
+      if (e.data.type === "navigate") {
+        const url = e.data.url;
+
+        const res = await fetch("/fetch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+
+        const data = await res.json();
+
+        document.getElementById("htmlText").value = data.html || "";
+        document.getElementById("cssText").value = data.css || "";
+        document.getElementById("jsText").value = data.js || "";
+
+        updatePreview();
+      }
+    });
+
     async function fetchCode() {
       const url = document.getElementById("url").value;
 
