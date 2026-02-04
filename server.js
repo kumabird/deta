@@ -18,7 +18,7 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// HTML / CSS / JS を取得する API
+// HTML / CSS / JS / フレームを取得する API
 app.post("/fetch", async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: "URL を指定してください" });
@@ -65,11 +65,32 @@ app.post("/fetch", async (req, res) => {
 
     const jsCode = jsList.join("\n\n");
 
-    res.json({ html: htmlCode, css: cssCode, js: jsCode });
+    // 🔥 フレーム対応（menu.htm / top.htm など）
+    const frames = $("frame").map((_, el) => $(el).attr("src")).get();
+    const frameContents = {};
+
+    for (const f of frames) {
+      const frameUrl = new URL(f, url).href;
+      try {
+        const frameRes = await fetch(frameUrl);
+        frameContents[f] = await frameRes.text();
+      } catch {
+        frameContents[f] = "取得失敗";
+      }
+    }
+
+    res.json({
+      html: htmlCode,
+      css: cssCode,
+      js: jsCode,
+      frames: frameContents
+    });
+
   } catch (e) {
     res.status(500).json({ error: "取得に失敗しました" });
   }
 });
 
+// Render / Railway 用ポート設定
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Server running on port ${port}`));
