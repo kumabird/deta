@@ -26,7 +26,11 @@
 <body>
 
   <input id="urlBar" placeholder="https://example.com">
+
+  <!-- ▼ SPAモード -->
   <button onclick="loadUrl()">移動（SPAモード）</button>
+
+  <!-- ▼ 普通に開く（あなたのコードを統合） -->
   <button onclick="openNormal()">普通に開く</button>
 
   <iframe id="preview"></iframe>
@@ -41,18 +45,12 @@
   <textarea id="jsView"></textarea>
 
   <script>
+    // ▼ SPAモード
     function loadUrl() {
       const url = document.getElementById("urlBar").value;
       load(url);
     }
 
-    // ▼ 普通の iframe として開く
-    function openNormal() {
-      const url = document.getElementById("urlBar").value;
-      document.getElementById("preview").src = url;
-    }
-
-    // ▼ SPAモード（/fetch → srcdoc）
     async function load(url) {
       const res = await fetch("/fetch", {
         method: "POST",
@@ -75,12 +73,18 @@
         .map(m => m[1]).join("\n\n");
       document.getElementById("jsView").value = js;
 
-      // ▼ プレビュー（SPA対応パッチ付き）
+      // ▼ プレビュー（SPA対応）
       document.getElementById("preview").srcdoc =
         injectPatches(data.html, data.base);
     }
 
-    // ▼ SPA対応パッチ（fetch書き換え + SW無効化 + 相対リンク捕捉）
+    // ▼ 普通に開く（あなたのコードをそのまま統合）
+    function openNormal() {
+      const url = document.getElementById("urlBar").value;
+      document.getElementById("preview").src = url;
+    }
+
+    // ▼ SPA対応パッチ
     function injectPatches(html, base) {
       return `
         <script>
