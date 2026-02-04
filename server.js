@@ -31,6 +31,8 @@ app.get("/proxy", async (req, res) => {
     // ★ ここが最重要 ★
     res.removeHeader("X-Frame-Options");
     res.removeHeader("Content-Security-Policy");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+res.setHeader("Access-Control-Allow-Headers", "*");
 
     res.send(Buffer.from(buffer));
   } catch (e) {
