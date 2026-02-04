@@ -11,7 +11,9 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// プロキシ（SPA の API / 画像 / CSS / JS すべて対応）
+// ------------------------------------------------------
+// 1. プロキシ（SPA の API / 画像 / CSS / JS すべて対応）
+// ------------------------------------------------------
 app.get("/proxy", async (req, res) => {
   const target = req.query.url;
   if (!target) return res.status(400).send("no url");
@@ -31,7 +33,9 @@ app.get("/proxy", async (req, res) => {
   }
 });
 
-// URL 書き換え（HTML 内の src/href を全部 proxy 化）
+// ------------------------------------------------------
+// 2. HTML 内の URL を全部 proxy 化
+// ------------------------------------------------------
 function rewriteUrls(html, baseUrl) {
   return html.replace(/(src|href)=["']([^"']+)["']/g, (match, attr, url) => {
     if (url.startsWith("http")) {
@@ -42,13 +46,14 @@ function rewriteUrls(html, baseUrl) {
   });
 }
 
-// フレーム再帰取得
+// ------------------------------------------------------
+// 3. フレーム再帰取得（frameset → frame → frame ...）
+// ------------------------------------------------------
 async function fetchFrame(url) {
   const res = await fetch(url);
   const html = await res.text();
   const $ = cheerio.load(html);
 
-  // frameset がある場合
   const frames = $("frame");
   if (frames.length > 0) {
     const frameData = [];
@@ -71,14 +76,15 @@ async function fetchFrame(url) {
     };
   }
 
-  // 通常の HTML
   return {
     type: "html",
     html: rewriteUrls(html, url)
   };
 }
 
-// /fetch API（フレーム再帰＋SPA対応）
+// ------------------------------------------------------
+// 4. /fetch API（フレーム再帰＋SPA対応）
+// ------------------------------------------------------
 app.post("/fetch", async (req, res) => {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: "URL required" });
@@ -91,7 +97,7 @@ app.post("/fetch", async (req, res) => {
   }
 });
 
-// index.html を返す
+// ------------------------------------------------------
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
