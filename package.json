@@ -1,11 +1,11 @@
 {
   "name": "html-fetcher",
   "version": "1.0.0",
-  "description": "Fetch HTML, CSS, JS from a given URL",
-  "main": "app.js",
+  "description": "Fetch HTML, CSS, JS and frames from a given URL",
+  "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node app.js",
+    "start": "node server.js",
     "build": "echo no build step"
   },
   "dependencies": {
