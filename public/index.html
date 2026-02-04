@@ -5,7 +5,44 @@
   <title>HTML / CSS / JS Fetcher</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
-    textarea { width: 100%; height: 200px; margin-top: 10px; }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      background: #eee;
+      cursor: pointer;
+      border-radius: 5px 5px 0 0;
+    }
+
+    .tab.active {
+      background: #fff;
+      border-bottom: 2px solid #fff;
+      font-weight: bold;
+    }
+
+    .panel {
+      display: none;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 0 5px 5px 5px;
+      background: #fff;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    textarea {
+      width: 100%;
+      height: 400px;
+      font-family: monospace;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -15,16 +52,39 @@
   <input id="url" placeholder="https://example.com" style="width:80%">
   <button onclick="fetchCode()">取得</button>
 
-  <h2>HTML</h2>
-  <textarea id="html"></textarea>
+  <!-- タブ -->
+  <div class="tabs">
+    <div class="tab active" data-target="html">HTML</div>
+    <div class="tab" data-target="css">CSS</div>
+    <div class="tab" data-target="js">JS</div>
+  </div>
 
-  <h2>CSS</h2>
-  <textarea id="css"></textarea>
+  <!-- パネル -->
+  <div id="html" class="panel active">
+    <textarea id="htmlText"></textarea>
+  </div>
 
-  <h2>JS</h2>
-  <textarea id="js"></textarea>
+  <div id="css" class="panel">
+    <textarea id="cssText"></textarea>
+  </div>
+
+  <div id="js" class="panel">
+    <textarea id="jsText"></textarea>
+  </div>
 
   <script>
+    // タブ切り替え
+    document.querySelectorAll(".tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+
+        tab.classList.add("active");
+        document.getElementById(tab.dataset.target).classList.add("active");
+      });
+    });
+
+    // API からコード取得
     async function fetchCode() {
       const url = document.getElementById("url").value;
 
@@ -36,9 +96,9 @@
 
       const data = await res.json();
 
-      document.getElementById("html").value = data.html || "";
-      document.getElementById("css").value = data.css || "";
-      document.getElementById("js").value = data.js || "";
+      document.getElementById("htmlText").value = data.html || "";
+      document.getElementById("cssText").value = data.css || "";
+      document.getElementById("jsText").value = data.js || "";
     }
   </script>
 
