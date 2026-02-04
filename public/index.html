@@ -1,108 +1,51 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
   <meta charset="UTF-8">
-  <title>Frame Browser</title>
+  <title>Mini Browser</title>
   <style>
     body { font-family: sans-serif; padding: 10px; }
     #urlBar { width: 80%; padding: 5px; }
-    #controls { margin-bottom: 10px; }
 
-    .frame-tabs { margin-top: 20px; }
-    .frame-tab {
-      display: inline-block;
-      padding: 8px 15px;
-      background: #eee;
-      margin-right: 5px;
-      cursor: pointer;
-      border-radius: 5px 5px 0 0;
-    }
-    .frame-tab.active {
-      background: #fff;
-      border-bottom: 2px solid #fff;
-      font-weight: bold;
-    }
-
-    .code-tabs { margin-top: 10px; }
-    .code-tab {
-      display: inline-block;
-      padding: 5px 10px;
-      background: #ddd;
-      margin-right: 5px;
-      cursor: pointer;
-      border-radius: 5px 5px 0 0;
-    }
-    .code-tab.active {
-      background: #fff;
-      border-bottom: 2px solid #fff;
-      font-weight: bold;
-    }
-
-    .panel {
-      display: none;
+    iframe {
+      width: 100%;
+      height: 60vh;
       border: 1px solid #ccc;
-      padding: 10px;
-      background: #fff;
+      margin-top: 10px;
     }
-    .panel.active { display: block; }
 
     textarea {
       width: 100%;
-      height: 400px;
+      height: 20vh;
+      margin-top: 10px;
       font-family: monospace;
+      white-space: pre;
     }
-    iframe {
-  width: 100%;
-  height: calc(100vh - 200px);
-  border: 1px solid #ccc;
-}
   </style>
 </head>
 <body>
 
-  <div id="controls">
-    <button onclick="goBack()">←</button>
-    <button onclick="goForward()">→</button>
-    <input id="urlBar" placeholder="https://example.com">
-    <button onclick="loadUrl()">移動</button>
-  </div>
+  <input id="urlBar" placeholder="https://example.com">
+  <button onclick="loadUrl()">移動</button>
 
-  <div id="frameTabs" class="frame-tabs"></div>
-  <div id="frameContent"></div>
+  <iframe id="preview"></iframe>
+
+  <h3>HTML</h3>
+  <textarea id="htmlView"></textarea>
+
+  <h3>CSS</h3>
+  <textarea id="cssView"></textarea>
+
+  <h3>JS</h3>
+  <textarea id="jsView"></textarea>
 
   <script>
-    const historyStack = [];
-    let historyIndex = -1;
-    let currentFrames = [];
-
-    function goBack() {
-      if (historyIndex > 0) {
-        historyIndex--;
-        load(historyStack[historyIndex], false);
-      }
-    }
-
-    function goForward() {
-      if (historyIndex < historyStack.length - 1) {
-        historyIndex++;
-        load(historyStack[historyIndex], false);
-      }
-    }
-
     function loadUrl() {
       const url = document.getElementById("urlBar").value;
-      load(url, true);
+      load(url);
     }
 
-    async function load(url, pushHistory) {
-      if (pushHistory) {
-        historyStack.splice(historyIndex + 1);
-        historyStack.push(url);
-        historyIndex++;
-      }
-
-      document.getElementById("urlBar").value = url;
-
+    async function load(url) {
       const res = await fetch("/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -110,202 +53,55 @@
       });
 
       const data = await res.json();
-      currentFrames = flattenFrames(data);
 
-      renderFrameTabs();
-      renderFrame(0);
+      // HTML をそのまま表示
+      document.getElementById("htmlView").value = data.html;
+
+      // CSS 抽出
+      const css = [...data.html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)]
+        .map(m => m[1]).join("\n\n");
+      document.getElementById("cssView").value = css;
+
+      // JS 抽出
+      const js = [...data.html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+        .map(m => m[1]).join("\n\n");
+      document.getElementById("jsView").value = js;
+
+      // プレビュー
+      document.getElementById("preview").srcdoc =
+        injectPatches(data.html, data.base);
     }
 
-    function flattenFrames(data) {
-      const result = [];
+    function injectPatches(html, base) {
+      return `
+        <script>
+          const originalFetch = window.fetch;
+          window.fetch = function(url, options) {
+            const absolute = new URL(url, "${base}").href;
+            return originalFetch("/proxy?url=" + absolute, options);
+          };
 
-      function walk(node) {
-        if (node.type === "html") {
-          result.push({
-            title: "Frame " + (result.length + 1),
-            html: node.html,
-            css: extractCSS(node.html),
-            js: extractJS(node.html)
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then(regs => {
+              for (const r of regs) r.unregister();
+            });
+          }
+
+          document.addEventListener("click", function(e) {
+            const a = e.target.closest("a");
+            if (!a) return;
+            e.preventDefault();
+            const absolute = new URL(a.getAttribute("href"), "${base}").href;
+            window.parent.postMessage({ url: absolute }, "*");
           });
-        }
-        if (node.type === "frameset") {
-          for (const f of node.frames) walk(f.content);
-        }
-      }
-
-      walk(data);
-      return result;
+        <\/script>
+      ` + html;
     }
 
-    function extractCSS(html) {
-      const matches = [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)];
-      return matches.map(m => m[1]).join("\n\n");
-    }
-
-    function extractJS(html) {
-      const matches = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)];
-      return matches.map(m => m[1]).join("\n\n");
-    }
-
-    function renderFrameTabs() {
-      const tabs = document.getElementById("frameTabs");
-      tabs.innerHTML = "";
-
-      currentFrames.forEach((f, i) => {
-        const tab = document.createElement("div");
-        tab.className = "frame-tab";
-        tab.textContent = f.title;
-        tab.onclick = () => renderFrame(i);
-        tabs.appendChild(tab);
-      });
-    }
-
-    function renderFrame(index) {
-      const frame = currentFrames[index];
-      const container = document.getElementById("frameContent");
-
-      document.querySelectorAll(".frame-tab").forEach((t, i) => {
-        t.classList.toggle("active", i === index);
-      });
-
-      container.innerHTML = `
-        <div class="code-tabs">
-          <div class="code-tab active" data-type="html">HTML</div>
-          <div class="code-tab" data-type="css">CSS</div>
-          <div class="code-tab" data-type="js">JS</div>
-          <div class="code-tab" data-type="preview">Preview</div>
-        </div>
-
-        <div id="panel-html" class="panel active">
-          <textarea>${frame.html}</textarea>
-        </div>
-
-        <div id="panel-css" class="panel">
-          <textarea>${frame.css}</textarea>
-        </div>
-
-        <div id="panel-js" class="panel">
-          <textarea>${frame.js}</textarea>
-        </div>
-
-        <div id="panel-preview" class="panel">
-          <!-- Part 3 で Preview を追加 -->
-        </div>
-      `;
-
-      container.querySelectorAll(".code-tab").forEach(tab => {
-        tab.onclick = () => {
-          container.querySelectorAll(".code-tab").forEach(t => t.classList.remove("active"));
-          container.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-
-          tab.classList.add("active");
-          document.getElementById("panel-" + tab.dataset.type).classList.add("active");
-        };
-      });
-    }
+    window.addEventListener("message", (e) => {
+      if (e.data.url) load(e.data.url);
+    });
   </script>
 
 </body>
 </html>
-<script>
-  // ============================
-  // SPA パッチ（fetch を強制 proxy 化）
-  // ============================
-  function injectPatches(html) {
-    return `
-      <script>
-        const originalFetch = window.fetch;
-        window.fetch = function(url, options) {
-          try {
-            const absolute = new URL(url, window.location.href).href;
-            return originalFetch("/proxy?url=" + absolute, options);
-          } catch {
-            return originalFetch(url, options);
-          }
-        };
-
-        // Service Worker 無効化
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.getRegistrations().then(regs => {
-            for (const r of regs) r.unregister();
-          });
-        }
-
-        // 相対リンク → 絶対 URL → 親へ navigate
-        document.addEventListener("click", function(e) {
-          const a = e.target.closest("a");
-          if (!a) return;
-          e.preventDefault();
-          const absolute = new URL(a.getAttribute("href"), window.location.href).href;
-          window.parent.postMessage({ type: "navigate", url: absolute }, "*");
-        });
-      <\/script>
-    ` + html;
-  }
-
-  // ============================
-  // フレーム内リンク捕捉
-  // ============================
-  window.addEventListener("message", (e) => {
-    if (e.data.type === "navigate") {
-      load(e.data.url, true);
-    }
-  });
-
-  // ============================
-  // Preview iframe の生成
-  // ============================
-  function renderFrame(index) {
-    const frame = currentFrames[index];
-    const container = document.getElementById("frameContent");
-
-    document.querySelectorAll(".frame-tab").forEach((t, i) => {
-      t.classList.toggle("active", i === index);
-    });
-
-    container.innerHTML = `
-      <div class="code-tabs">
-        <div class="code-tab active" data-type="html">HTML</div>
-        <div class="code-tab" data-type="css">CSS</div>
-        <div class="code-tab" data-type="js">JS</div>
-        <div class="code-tab" data-type="preview">Preview</div>
-      </div>
-
-      <div id="panel-html" class="panel active">
-        <textarea>${frame.html}</textarea>
-      </div>
-
-      <div id="panel-css" class="panel">
-        <textarea>${frame.css}</textarea>
-      </div>
-
-      <div id="panel-js" class="panel">
-        <textarea>${frame.js}</textarea>
-      </div>
-
-      <div id="panel-preview" class="panel">
-        <iframe srcdoc="${escapeHtml(injectPatches(frame.html))}"></iframe>
-      </div>
-    `;
-
-    container.querySelectorAll(".code-tab").forEach(tab => {
-      tab.onclick = () => {
-        container.querySelectorAll(".code-tab").forEach(t => t.classList.remove("active"));
-        container.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-
-        tab.classList.add("active");
-        document.getElementById("panel-" + tab.dataset.type).classList.add("active");
-      };
-    });
-  }
-
-  // ============================
-  // HTML エスケープ
-  // ============================
-  function escapeHtml(str) {
-    return str
-      .replace(/"/g, "&quot;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
-</script>
