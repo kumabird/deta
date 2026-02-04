@@ -69,7 +69,7 @@
       const viewer = document.getElementById("viewer");
 
       if (data.type === "html") {
-        viewer.innerHTML = `<iframe srcdoc="${escapeHtml(data.html)}"></iframe>`;
+        viewer.innerHTML = `<iframe srcdoc="${escapeHtml(injectPatches(data.html))}"></iframe>`;
         return;
       }
 
@@ -77,8 +77,9 @@
         let html = `<div class='frame-container'>`;
 
         for (const f of data.frames) {
+          const content = f.content.html ? injectPatches(f.content.html) : "";
           html += `
-            <iframe class="frame-item" srcdoc="${escapeHtml(f.content.html || '')}"></iframe>
+            <iframe class="frame-item" srcdoc="${escapeHtml(content)}"></iframe>
           `;
         }
 
@@ -86,6 +87,42 @@
         viewer.innerHTML = html;
       }
     }
+
+    function injectPatches(html) {
+      return `
+        <script>
+          const originalFetch = window.fetch;
+          window.fetch = function(url, options) {
+            try {
+              const absolute = new URL(url, window.location.href).href;
+              return originalFetch("/proxy?url=" + absolute, options);
+            } catch {
+              return originalFetch(url, options);
+            }
+          };
+
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then(regs => {
+              for (const r of regs) r.unregister();
+            });
+          }
+
+          document.addEventListener("click", function(e) {
+            const a = e.target.closest("a");
+            if (!a) return;
+            e.preventDefault();
+            const url = a.href;
+            window.parent.postMessage({ type: "navigate", url }, "*");
+          });
+        <\/script>
+      ` + html;
+    }
+
+    window.addEventListener("message", async (e) => {
+      if (e.data.type === "navigate") {
+        load(e.data.url, true);
+      }
+    });
 
     function escapeHtml(str) {
       return str.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
