@@ -5,7 +5,7 @@
   <title>Mini Browser</title>
   <style>
     body { font-family: sans-serif; padding: 10px; }
-    #urlBar { width: 80%; padding: 5px; }
+    #urlBar { width: 70%; padding: 5px; }
 
     iframe {
       width: 100%;
@@ -26,7 +26,8 @@
 <body>
 
   <input id="urlBar" placeholder="https://example.com">
-  <button onclick="loadUrl()">移動</button>
+  <button onclick="loadUrl()">移動（SPAモード）</button>
+  <button onclick="openNormal()">普通に開く</button>
 
   <iframe id="preview"></iframe>
 
@@ -45,6 +46,13 @@
       load(url);
     }
 
+    // ▼ 普通の iframe として開く
+    function openNormal() {
+      const url = document.getElementById("urlBar").value;
+      document.getElementById("preview").src = url;
+    }
+
+    // ▼ SPAモード（/fetch → srcdoc）
     async function load(url) {
       const res = await fetch("/fetch", {
         method: "POST",
@@ -67,11 +75,12 @@
         .map(m => m[1]).join("\n\n");
       document.getElementById("jsView").value = js;
 
-      // プレビュー
+      // ▼ プレビュー（SPA対応パッチ付き）
       document.getElementById("preview").srcdoc =
         injectPatches(data.html, data.base);
     }
 
+    // ▼ SPA対応パッチ（fetch書き換え + SW無効化 + 相対リンク捕捉）
     function injectPatches(html, base) {
       return `
         <script>
@@ -98,6 +107,7 @@
       ` + html;
     }
 
+    // ▼ iframe 内リンク → 親で load()
     window.addEventListener("message", (e) => {
       if (e.data.url) load(e.data.url);
     });
