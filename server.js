@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // ------------------------------------------------------
-// 1. プロキシ（SPA の API / 画像 / CSS / JS すべて対応）
+// 1. 完全プロキシ（画像 / CSS / JS / API / manifest / font / favicon）
 // ------------------------------------------------------
 app.get("/proxy", async (req, res) => {
   const target = req.query.url;
@@ -34,23 +34,22 @@ app.get("/proxy", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// 2. HTML 内の URL を全部 proxy 化
+// 2. HTML 内の URL をすべて proxy 化（相対パス完全対応）
 // ------------------------------------------------------
-function rewriteUrls(html, baseUrl) {
-  return html.replace(/(src|href)=["']([^"']+)["']/g, (match, attr, url) => {
-    if (url.startsWith("http")) {
-      return `${attr}="/proxy?url=${url}"`;
-    }
+function rewriteAllUrls(html, baseUrl) {
+  return html.replace(/(src|href)=["']([^"']+)["']/g, (m, attr, url) => {
     const absolute = new URL(url, baseUrl).href;
     return `${attr}="/proxy?url=${absolute}"`;
   });
 }
 
 // ------------------------------------------------------
-// 3. フレーム再帰取得（frameset → frame → frame ...）
+// 3. フレーム再帰解析（frameset → frame → frame）
 // ------------------------------------------------------
 async function fetchFrame(url) {
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0" }
+  });
   const html = await res.text();
   const $ = cheerio.load(html);
 
@@ -59,7 +58,7 @@ async function fetchFrame(url) {
     const frameData = [];
 
     for (const el of frames.toArray()) {
-      const src = $(el).attr("src");
+      const src = $(el).attr("src") || "";
       const frameUrl = new URL(src, url).href;
 
       const content = await fetchFrame(frameUrl);
@@ -78,12 +77,12 @@ async function fetchFrame(url) {
 
   return {
     type: "html",
-    html: rewriteUrls(html, url)
+    html: rewriteAllUrls(html, url)
   };
 }
 
 // ------------------------------------------------------
-// 4. /fetch API（フレーム再帰＋SPA対応）
+// 4. /fetch（フレーム再帰 + SPA対応）
 // ------------------------------------------------------
 app.post("/fetch", async (req, res) => {
   const { url } = req.body;
